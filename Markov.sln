@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.26730.16
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Markov", "Markov\Markov.csproj", "{0F2FC2A1-31DA-4676-B21A-34C563813C01}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Harness", "Harness\Harness.csproj", "{94EA268F-9F7F-4AB8-A0CA-AE5608B063EF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0F2FC2A1-31DA-4676-B21A-34C563813C01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0F2FC2A1-31DA-4676-B21A-34C563813C01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0F2FC2A1-31DA-4676-B21A-34C563813C01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0F2FC2A1-31DA-4676-B21A-34C563813C01}.Release|Any CPU.Build.0 = Release|Any CPU
+		{94EA268F-9F7F-4AB8-A0CA-AE5608B063EF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{94EA268F-9F7F-4AB8-A0CA-AE5608B063EF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{94EA268F-9F7F-4AB8-A0CA-AE5608B063EF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{94EA268F-9F7F-4AB8-A0CA-AE5608B063EF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {56D7941B-30E9-4D59-9975-C8F0F91F562C}
+	EndGlobalSection
+EndGlobal
