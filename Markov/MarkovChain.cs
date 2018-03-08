@@ -67,8 +67,11 @@ namespace Markov
             return str.Replace(@"""", "");
         }
 
-        public string Generate(int length, string seedWord = "The")
+        Random r = new Random();
+        public string Generate(int length)
         {
+            int rand = r.Next(_graph.Count);
+            string seedWord = _graph.Keys.ToList()[rand];
             var sb = new StringBuilder();
             var random = new Random();
             var prevWord = seedWord;
