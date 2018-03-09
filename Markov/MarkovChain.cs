@@ -4,32 +4,56 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Linq;
+using System.Text.RegularExpressions;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Security.Cryptography;
 
 namespace Markov
 {
-    public class MarkovChain
+    public class MarkovChain : IDisposable
     {
         private Dictionary<string, Dictionary<string, int>> _occurences = new Dictionary<string, Dictionary<string, int>>();
         private Dictionary<string, Dictionary<string, double>> _graph;
+        private static Random random = new Random();
+        private string persistenceFilepath = "graph.bin";
+        private SHA256 hash;
 
-        public MarkovChain()
+        public MarkovChain(string text)
         {
-           
-        }
-        public void Parse(params string[] text)
-        {
-            foreach(var str in text)
+            bool flag = true;
+            var sha256 = SHA256.Create();
+            var hash = sha256.ComputeHash(Encoding.ASCII.GetBytes(text));
+            if (!File.Exists("hash.dat"))
             {
-                if (str.Length == 0) continue;
-                var t = Sanitize(str);
-                var prevWord = t.Substring(0, t.IndexOf(' '));
-                foreach(var word in str.Split(' ').Skip(1))
+                flag = false;
+            }
+            else
+            {
+                var oldHash = File.ReadAllBytes("hash.dat");
+                for (int i = 0; i < hash.Length; i++) if (hash[i] != oldHash[i]) flag = false;
+            }
+            if (flag)
+            {
+                BinaryFormatter binform = new BinaryFormatter();
+                var graph = binform.Deserialize(new FileStream(persistenceFilepath, FileMode.Open)) as Dictionary<string, Dictionary<string, double>>;
+                if (graph != null)
                 {
-                    if(_occurences.ContainsKey(prevWord))
+                    _graph = graph;
+                }
+            }
+            else
+            {
+                File.WriteAllBytes("hash.dat", hash);
+                var t = Sanitize(text);
+
+                var prevWord = t.Substring(0, t.IndexOf(' '));
+                foreach (var word in t.Split(' ').Skip(1))
+                {
+                    if (_occurences.ContainsKey(prevWord))
                     {
 
                         var wordDict = _occurences[prevWord];
-                        if(wordDict.ContainsKey(word))
+                        if (wordDict.ContainsKey(word))
                         {
                             wordDict[word]++;
                         }
@@ -44,8 +68,9 @@ namespace Markov
                     }
                     prevWord = word;
                 }
+
+                ConstructGraph();
             }
-            ConstructGraph();
         }
 
         private void ConstructGraph()
@@ -64,40 +89,37 @@ namespace Markov
 
         private string Sanitize(string str)
         {
-            return str.Replace(@"""", "");
+            foreach(var regex in sanitizationRegexes)
+            {
+                str = regex.Replace(str, String.Empty);
+            }
+            return str;
         }
+        private List<Regex> sanitizationRegexes = new List<Regex>
+        {
+            new Regex(@"[0-9]*"),
+            new Regex(@"_"),
+            new Regex(@"\(|\)")
+        };
 
         Random r = new Random();
-        public string Generate(int length)
+        public string GenerateSentence()
         {
-            int rand = r.Next(_graph.Count);
-            string seedWord = _graph.Keys.ToList()[rand];
+            string seedWord = _graph.Keys.ToList()[r.Next(_graph.Count)];
             var sb = new StringBuilder();
-            var random = new Random();
             var prevWord = seedWord;
-            bool beginSentence = true;
-            for(int i = 0; i < length; i++)
+            int prevLength = 0;
+            int wordsInSentence = 0;
+            do
             {
                 var r = random.NextDouble();
                 double total = 0;
                 var dict = _graph[prevWord];
-                foreach(var word in dict)
+                foreach (var word in dict)
                 {
-                    if(r < word.Value + total)
+                    if (r < word.Value + total)
                     {
-                        if (word.Key.Length == 0) continue;
-                        if (beginSentence)
-                        {
-                            var wordArray = word.Key.ToCharArray();
-                            wordArray[0] = char.ToUpper(wordArray[0]);
-                            sb.Append(new string(wordArray) + " ");
-                            beginSentence = false;
-                        }
-                        else
-                        {
-                            sb.Append(word.Key + " ");
-                            if (word.Key.Contains('.')) beginSentence = true;
-                        }
+                        sb.Append(word.Key + " ");
                         prevWord = word.Key;
                         break;
                     }
@@ -106,14 +128,43 @@ namespace Markov
                         total += word.Value;
                     }
                 }
+                if(prevLength == sb.Length)
+                {
+                    prevWord = _graph.Keys.ToList()[random.Next(_graph.Count)];
+                }
+                prevLength = sb.Length;
+                if(wordsInSentence < 4 && sb.ToString().Contains('.'))
+                {
+                    sb.Replace('.', ' ');
+                }
+                wordsInSentence++;
+            } while (!sb.ToString().Contains('.'));
+            return sb.ToString();
+        }
+        public string GenerateSentences(int length)
+        {
+            var sb = new StringBuilder();
+            for (int i = 0; i < length; i++)
+            {
+                sb.Append(GenerateSentence());
             }
             return sb.ToString();
         }
 
         public void SaveState(string filepath)
         {
-            var json = JsonConvert.SerializeObject(_occurences);
-            File.WriteAllText(filepath, json);
+            try
+            {
+                BinaryFormatter binform = new BinaryFormatter();
+                var stream = new FileStream(filepath, FileMode.OpenOrCreate);
+                binform.Serialize(stream, _graph);
+            }
+            catch { }
+        }
+
+        public void Dispose()
+        {
+            SaveState(persistenceFilepath);
         }
     }
 }
