@@ -7,6 +7,8 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace Markov
 {
@@ -15,63 +17,49 @@ namespace Markov
         private Dictionary<string, Dictionary<string, int>> _occurences = new Dictionary<string, Dictionary<string, int>>();
         private Dictionary<string, Dictionary<string, double>> _graph;
         private static Random random = new Random();
-        private string persistenceFilepath = "graph.bin";
-        private SHA256 hash;
+        string text;
 
-        public MarkovChain(string text)
+        public MarkovChain(string filename)
         {
-            bool flag = true;
-            var sha256 = SHA256.Create();
-            var hash = sha256.ComputeHash(Encoding.ASCII.GetBytes(text));
-            if (!File.Exists("hash.dat"))
+            string text;
+            if (File.Exists("signal.butts"))
             {
-                flag = false;
+                text = File.ReadAllText(filename);
             }
             else
             {
-                var oldHash = File.ReadAllBytes("hash.dat");
-                for (int i = 0; i < hash.Length; i++) if (hash[i] != oldHash[i]) flag = false;
+                text = File.ReadAllText(filename);
+                text = Sanitize(text);
+                File.WriteAllText(filename, text);
+                File.Create("signal.butts");
             }
-            if (flag)
-            {
-                BinaryFormatter binform = new BinaryFormatter();
-                var graph = binform.Deserialize(new FileStream(persistenceFilepath, FileMode.Open)) as Dictionary<string, Dictionary<string, double>>;
-                if (graph != null)
-                {
-                    _graph = graph;
-                }
-            }
-            else
-            {
-                File.WriteAllBytes("hash.dat", hash);
-                var t = Sanitize(text);
 
-                var prevWord = t.Substring(0, t.IndexOf(' '));
-                foreach (var word in t.Split(' ').Skip(1))
+            var prevWord = text.Substring(0, text.IndexOf(' '));
+            foreach (var word in text.Split(' ').Skip(1))
+            {
+                if (_occurences.ContainsKey(prevWord))
                 {
-                    if (_occurences.ContainsKey(prevWord))
+
+                    var wordDict = _occurences[prevWord];
+                    if (wordDict.ContainsKey(word))
                     {
-
-                        var wordDict = _occurences[prevWord];
-                        if (wordDict.ContainsKey(word))
-                        {
-                            wordDict[word]++;
-                        }
-                        else
-                        {
-                            wordDict.Add(word, 1);
-                        }
+                        wordDict[word]++;
                     }
                     else
                     {
-                        _occurences.Add(prevWord, new Dictionary<string, int>(new List<KeyValuePair<string, int>> { new KeyValuePair<string, int>(word, 1) }));
+                        wordDict.Add(word, 1);
                     }
-                    prevWord = word;
                 }
-
-                ConstructGraph();
+                else
+                {
+                    _occurences.Add(prevWord, new Dictionary<string, int>(new List<KeyValuePair<string, int>> { new KeyValuePair<string, int>(word, 1) }));
+                }
+                prevWord = word;
             }
+
+            ConstructGraph();
         }
+        
 
         private void ConstructGraph()
         {
@@ -93,13 +81,16 @@ namespace Markov
             {
                 str = regex.Replace(str, String.Empty);
             }
-            return str;
+            return str.ToLower();
         }
         private List<Regex> sanitizationRegexes = new List<Regex>
         {
             new Regex(@"[0-9]*"),
             new Regex(@"_"),
-            new Regex(@"\(|\)")
+            new Regex(@"\(|\)"),
+            new Regex("\""),
+            new Regex("[\r\n]+"),
+            new Regex(@"\s\s+")
         };
 
         Random r = new Random();
@@ -110,6 +101,7 @@ namespace Markov
             var prevWord = seedWord;
             int prevLength = 0;
             int wordsInSentence = 0;
+            bool first = true;
             do
             {
                 var r = random.NextDouble();
@@ -119,7 +111,17 @@ namespace Markov
                 {
                     if (r < word.Value + total)
                     {
-                        sb.Append(word.Key + " ");
+                        if (first)
+                        {
+                            var wordArr = word.Key.ToCharArray();
+                            wordArr[0] = char.ToUpper(wordArr[0]);
+                            first = false;
+                            sb.Append(new string(wordArr) + " ");
+                        }
+                        else
+                        {
+                            sb.Append(word.Key + " ");
+                        }
                         prevWord = word.Key;
                         break;
                     }
@@ -138,33 +140,29 @@ namespace Markov
                     sb.Replace('.', ' ');
                 }
                 wordsInSentence++;
-            } while (!sb.ToString().Contains('.'));
+            } while (!sb.ToString().Contains('.') && !sb.ToString().Contains('?') && !sb.ToString().Contains('!'));
             return sb.ToString();
         }
         public string GenerateSentences(int length)
         {
+            var bag = new ConcurrentBag<string>();
             var sb = new StringBuilder();
-            for (int i = 0; i < length; i++)
+            Parallel.For(0, length, (i) =>
             {
-                sb.Append(GenerateSentence());
+                bag.Add(GenerateSentence());
+            });
+
+            foreach(var sentence in bag)
+            {
+                sb.Append(sentence);
             }
             return sb.ToString();
         }
 
-        public void SaveState(string filepath)
-        {
-            try
-            {
-                BinaryFormatter binform = new BinaryFormatter();
-                var stream = new FileStream(filepath, FileMode.OpenOrCreate);
-                binform.Serialize(stream, _graph);
-            }
-            catch { }
-        }
 
         public void Dispose()
         {
-            SaveState(persistenceFilepath);
+
         }
     }
 }

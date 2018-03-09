@@ -7,11 +7,9 @@ namespace Harness
     {
         static void Main(string[] args)
         {
-            var text = File.ReadAllText("text.txt");
-            using (var markov = new Markov.MarkovChain(text))
+            using (var markov = new Markov.MarkovChain("text.txt"))
             {
-                text = text.Replace(Environment.NewLine, " ");
-                Console.Write(markov.GenerateSentences(10));
+                Console.Write(markov.GenerateSentences(1));
             }
         }
     }
