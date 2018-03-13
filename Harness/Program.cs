@@ -9,7 +9,7 @@ namespace Harness
         {
             using (var markov = new Markov.MarkovChain("text.txt"))
             {
-                Console.Write(markov.GenerateSentences(1));
+                Console.Write(markov.GenerateSentences(3));
             }
         }
     }

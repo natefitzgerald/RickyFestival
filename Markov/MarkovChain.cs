@@ -16,8 +16,8 @@ namespace Markov
     {
         private Dictionary<string, Dictionary<string, int>> _occurences = new Dictionary<string, Dictionary<string, int>>();
         private Dictionary<string, Dictionary<string, double>> _graph;
+        private List<string> properNouns = new List<string>();
         private static Random random = new Random();
-        string text;
 
         public MarkovChain(string filename)
         {
@@ -34,7 +34,12 @@ namespace Markov
                 File.Create("signal.butts");
             }
 
+            var lines = File.ReadAllLines("dictionary.txt");
+            var set = new HashSet<string>(lines);
             var prevWord = text.Substring(0, text.IndexOf(' '));
+            _occurences.Add("PROPER_NOUN", new Dictionary<string, int>());
+            bool inProperNoun = false;
+
             foreach (var word in text.Split(' ').Skip(1))
             {
                 if (_occurences.ContainsKey(prevWord))
@@ -43,16 +48,48 @@ namespace Markov
                     var wordDict = _occurences[prevWord];
                     if (wordDict.ContainsKey(word))
                     {
+                        inProperNoun = false;
                         wordDict[word]++;
                     }
                     else
                     {
-                        wordDict.Add(word, 1);
+                        if (!inProperNoun)
+                        {
+                            inProperNoun = true;
+                            var sanitizedWord = prevWord.Replace(".", "").Replace(",", "").ToLower();
+                            if (set.Contains(sanitizedWord))
+                            {
+                                if (wordDict.ContainsKey("PROPER_NOUN")) wordDict["PROPER_NOUN"]++;
+                                else wordDict.Add("PROPER_NOUN", 1);
+                            }
+                        }
                     }
                 }
                 else
                 {
-                    _occurences.Add(prevWord, new Dictionary<string, int>(new List<KeyValuePair<string, int>> { new KeyValuePair<string, int>(word, 1) }));
+                    var sanitizedWord = prevWord.Replace(".", "").Replace(",", "").ToLower();
+                    if (set.Contains(sanitizedWord) && !properNouns.Contains(word))
+                    {
+                        _occurences.Add(prevWord, new Dictionary<string, int>(new List<KeyValuePair<string, int>> { new KeyValuePair<string, int>(word, 1) }));
+                        inProperNoun = false;
+                    }
+                    else
+                    {
+                        if (!inProperNoun)
+                        {
+                            inProperNoun = true;
+                            properNouns.Add(prevWord);
+                            var wordDict = _occurences["PROPER_NOUN"];
+                            if (wordDict.ContainsKey(word))
+                            {
+                                wordDict[word]++;
+                            }
+                            else
+                            {
+                                wordDict.Add(word, 1);
+                            }
+                        }
+                    }
                 }
                 prevWord = word;
             }
@@ -77,18 +114,19 @@ namespace Markov
 
         private string Sanitize(string str)
         {
-            foreach(var regex in sanitizationRegexes)
+            foreach (var regex in sanitizationRegexes)
             {
-                str = regex.Replace(str, String.Empty);
+                str = regex.Replace(str, " ");
             }
-            return str.ToLower();
+            return str;//.ToLower();
         }
         private List<Regex> sanitizationRegexes = new List<Regex>
         {
-            new Regex(@"[0-9]*"),
+            new Regex(@"[0-9]"),
             new Regex(@"_"),
-            new Regex(@"\(|\)"),
+            new Regex(@"\(|\)|\[|\]|\|"),
             new Regex("\""),
+            new Regex("_"),
             new Regex("[\r\n]+"),
             new Regex(@"\s\s+")
         };
@@ -101,33 +139,54 @@ namespace Markov
             var prevWord = seedWord;
             int prevLength = 0;
             int wordsInSentence = 0;
+            List<string> recentProperNouns = fillProperNouns();
             bool first = true;
             do
             {
                 var r = random.NextDouble();
                 double total = 0;
+                while(!_graph.ContainsKey(prevWord)) prevWord = _graph.Keys.ToList()[random.Next(_graph.Count)];
                 var dict = _graph[prevWord];
-                foreach (var word in dict)
+               
+                foreach (var pair in dict)
                 {
-                    if (r < word.Value + total)
+                    var word = pair.Key;
+                    if (r < pair.Value + total)
                     {
+                        if(pair.Key == "PROPER_NOUN")
+                        {
+                            var randomNo = random.Next(2);
+                            if (randomNo == 0)
+                            {
+                                word = properNouns[0];
+                                for (int n = 1; (double)1 / n > (double)1 / recentProperNouns.Count; n++) if (random.NextDouble() < n) word = properNouns[n];
+                            }
+                            else
+                            {
+                                string newProperNoun = "";
+                                while(newProperNoun.Length == 0) newProperNoun = properNouns[random.Next(properNouns.Count)];
+                                recentProperNouns.Insert(0, newProperNoun);
+                                word = newProperNoun;
+                            }
+                            
+                        }
                         if (first)
                         {
-                            var wordArr = word.Key.ToCharArray();
+                            var wordArr = word.ToCharArray();
                             wordArr[0] = char.ToUpper(wordArr[0]);
                             first = false;
                             sb.Append(new string(wordArr) + " ");
                         }
                         else
                         {
-                            sb.Append(word.Key + " ");
+                            sb.Append(word + " ");
                         }
-                        prevWord = word.Key;
+                        prevWord = word;
                         break;
                     }
                     else
                     {
-                        total += word.Value;
+                        total += pair.Value;
                     }
                 }
                 if(prevLength == sb.Length)
@@ -141,7 +200,21 @@ namespace Markov
                 }
                 wordsInSentence++;
             } while (!sb.ToString().Contains('.') && !sb.ToString().Contains('?') && !sb.ToString().Contains('!'));
-            return sb.ToString();
+            var str = sb.ToString();
+            return str + " ";
+        }
+        private List<string> fillProperNouns()
+        {
+            var list = new List<string>();
+            do
+            {
+                var name = properNouns[random.Next(properNouns.Count)];
+                if (name.Length >= 2 && ! name.Contains("."))
+                {
+                    list.Add(name);
+                }
+            } while (list.Count < 10);
+            return list;
         }
         public string GenerateSentences(int length)
         {
@@ -149,7 +222,9 @@ namespace Markov
             var sb = new StringBuilder();
             Parallel.For(0, length, (i) =>
             {
-                bag.Add(GenerateSentence());
+                var sentence = "";
+                while(sentence.Length < 5) sentence = GenerateSentence();
+                bag.Add(sentence);
             });
 
             foreach(var sentence in bag)
