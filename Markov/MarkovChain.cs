@@ -16,7 +16,7 @@ namespace Markov
     {
         private Dictionary<string, Dictionary<string, int>> _occurences = new Dictionary<string, Dictionary<string, int>>();
         private Dictionary<string, Dictionary<string, double>> _graph;
-        private List<string> properNouns = new List<string>();
+        private static List<string> properNouns = new List<string>();
         private static Random random = new Random();
 
         public MarkovChain(string filename)
@@ -67,6 +67,7 @@ namespace Markov
                 }
                 else
                 {
+                    //if (prevWord[0] > 91) continue;
                     var sanitizedWord = prevWord.Replace(".", "").Replace(",", "").ToLower();
                     if (set.Contains(sanitizedWord) && !properNouns.Contains(word))
                     {
@@ -93,8 +94,8 @@ namespace Markov
                 }
                 prevWord = word;
             }
-
             ConstructGraph();
+            recentProperNouns = fillProperNouns();
         }
         
 
@@ -128,10 +129,13 @@ namespace Markov
             new Regex("\""),
             new Regex("_"),
             new Regex("[\r\n]+"),
-            new Regex(@"\s\s+")
+            new Regex(@"-"),
+            new Regex(@"'"),
+            new Regex(@"[^\u0000-\u007F]+"),
         };
 
         Random r = new Random();
+        ConcurrentBag<string> recentProperNouns;
         public string GenerateSentence()
         {
             string seedWord = _graph.Keys.ToList()[r.Next(_graph.Count)];
@@ -139,7 +143,6 @@ namespace Markov
             var prevWord = seedWord;
             int prevLength = 0;
             int wordsInSentence = 0;
-            List<string> recentProperNouns = fillProperNouns();
             bool first = true;
             do
             {
@@ -151,24 +154,14 @@ namespace Markov
                 foreach (var pair in dict)
                 {
                     var word = pair.Key;
+                    if (word == "i") word = "I";
+                    else if (word == "a") word = "A";
+                    else if (word.Length < 2) continue;
                     if (r < pair.Value + total)
                     {
                         if(pair.Key == "PROPER_NOUN")
                         {
-                            var randomNo = random.Next(2);
-                            if (randomNo == 0)
-                            {
-                                word = properNouns[0];
-                                for (int n = 1; (double)1 / n > (double)1 / recentProperNouns.Count; n++) if (random.NextDouble() < n) word = properNouns[n];
-                            }
-                            else
-                            {
-                                string newProperNoun = "";
-                                while(newProperNoun.Length == 0) newProperNoun = properNouns[random.Next(properNouns.Count)];
-                                recentProperNouns.Insert(0, newProperNoun);
-                                word = newProperNoun;
-                            }
-                            
+                            word = recentProperNouns.Skip(random.Next(recentProperNouns.Count)).Take(1).First();
                         }
                         if (first)
                         {
@@ -194,7 +187,7 @@ namespace Markov
                     prevWord = _graph.Keys.ToList()[random.Next(_graph.Count)];
                 }
                 prevLength = sb.Length;
-                if(wordsInSentence < 4 && sb.ToString().Contains('.'))
+                if(wordsInSentence < 8 && sb.ToString().Contains('.'))
                 {
                     sb.Replace('.', ' ');
                 }
@@ -203,9 +196,9 @@ namespace Markov
             var str = sb.ToString();
             return str + " ";
         }
-        private List<string> fillProperNouns()
+        private static ConcurrentBag<string> fillProperNouns()
         {
-            var list = new List<string>();
+            var list = new ConcurrentBag<string>();
             do
             {
                 var name = properNouns[random.Next(properNouns.Count)];
@@ -213,7 +206,7 @@ namespace Markov
                 {
                     list.Add(name);
                 }
-            } while (list.Count < 10);
+            } while (list.Count < MarkovConstants.PROPER_NOUN_LIST_LENGTH);
             return list;
         }
         public string GenerateSentences(int length)

@@ -11,6 +11,7 @@ namespace Harness
             {
                 Console.Write(markov.GenerateSentences(3));
             }
+            Console.ReadKey(true);
         }
     }
 }
