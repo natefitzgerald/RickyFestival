@@ -18,14 +18,14 @@ namespace Markov
         private Dictionary<string, Dictionary<string, double>> _graph;
         private static List<string> properNouns = new List<string>();
         private static RNGCryptoServiceProvider random = new RNGCryptoServiceProvider();
+        private static Regex punctuation = new Regex(@"\?|\!|\;|\:|\,|\.");
 
         public MarkovChain(string filename)
         {
             string text;
+
             if (File.Exists("signal.butts"))
-            {
                 text = File.ReadAllText(filename);
-            }
             else
             {
                 text = File.ReadAllText(filename);
@@ -38,70 +38,48 @@ namespace Markov
             var set = new HashSet<string>(lines);
             var prevWord = text.Substring(0, text.IndexOf(' '));
             _occurences.Add("flibbartygibbet", new Dictionary<string, int>());
-            bool inProperNoun = false;
 
             foreach (var word in text.Split(' ').Skip(1))
             {
                 if (_occurences.ContainsKey(prevWord))
                 {
-
                     var wordDict = _occurences[prevWord];
+
                     if (wordDict.ContainsKey(word))
-                    {
-                        inProperNoun = false;
                         wordDict[word]++;
-                    }
                     else
                     {
-                        if (!inProperNoun)
+                        var sanitizedWord = prevWord.Replace(".", "").Replace(",", "").ToLower();
+                        if (set.Contains(sanitizedWord))
                         {
-                            inProperNoun = true;
-                            var sanitizedWord = prevWord.Replace(".", "").Replace(",", "").ToLower();
-                            if (set.Contains(sanitizedWord))
-                            {
-                                if (wordDict.ContainsKey("flibbartygibbet")) wordDict["flibbartygibbet"]++;
-                                else wordDict.Add("flibbartygibbet", 1);
-                            }
+                            if (wordDict.ContainsKey("flibbartygibbet")) wordDict["flibbartygibbet"]++;
+                            else wordDict.Add("flibbartygibbet", 1);
                         }
+
                     }
                 }
                 else
                 {
-                    //if (prevWord[0] > 91) continue;
-                    var punctuation = new Regex(@"\?|\!|\;|\:|\,|\.");
-                    var sanitizedWord = punctuation.Replace(prevWord, "").ToLower();
+                    var sanitizedWord = punctuation.Replace(word, "").ToLower();
                     if (set.Contains(sanitizedWord) && !properNouns.Contains(word))
-                    {
-                        _occurences.Add(prevWord, new Dictionary<string, int>(new List<KeyValuePair<string, int>> { new KeyValuePair<string, int>(word, 1) }));
-                        inProperNoun = false;
-                    }
+                        _occurences.Add(prevWord, new Dictionary<string, int>(new List<KeyValuePair<string, int>> { new KeyValuePair<string, int>(sanitizedWord, 1) }));
                     else
                     {
-                        if (!inProperNoun)
+                        if (sanitizedWord.Length > 1)
                         {
-                            inProperNoun = true;
-                            if (sanitizedWord.Length > 1)
-                            {
-                                properNouns.Add(sanitizedWord);
-                                var wordDict = _occurences["flibbartygibbet"];
-                                if (wordDict.ContainsKey(word))
-                                {
-                                    wordDict[word]++;
-                                }
-                                else
-                                {
-                                    wordDict.Add(word, 1);
-                                }
-                            }
+                            properNouns.Add(sanitizedWord);
+                            var wordDict = _occurences["flibbartygibbet"];
+                            if (wordDict.ContainsKey(word))
+                                wordDict[word]++;
+                            else
+                                wordDict.Add(word, 1);
                         }
                     }
                 }
-                prevWord = word;
+                prevWord = punctuation.Replace(word, "").ToLower();
             }
             ConstructGraph();
-            recentProperNouns = fillProperNouns();
         }
-        
 
         private void ConstructGraph()
         {
@@ -110,19 +88,30 @@ namespace Markov
             {
                 int total = _occurences[key].Values.Sum();
                 _graph[key] = new Dictionary<string, double>();
-                foreach(var word in _occurences[key])
-                {
+                foreach (var word in _occurences[key])
                     _graph[key].Add(word.Key, _occurences[key][word.Key] / (double)total);
-                }
-            }//sort the graph here later for substantial speedup
+
+            }
+        }
+        public string GenerateSentences(int length)
+        {
+            var bag = new ConcurrentBag<string>();
+            var sb = new StringBuilder();
+            Parallel.For(0, length, (i) =>
+            {
+                bag.Add(GenerateSentence());
+            });
+
+            foreach (var sentence in bag)
+            {
+                sb.Append(sentence);
+            }
+            return sb.ToString();
         }
 
         private string Sanitize(string str)
         {
-            foreach (var regex in sanitizationRegexes)
-            {
-                str = regex.Replace(str, " ");
-            }
+            foreach (var regex in sanitizationRegexes) str = regex.Replace(str, " ");
             return str;//.ToLower();
         }
         private List<Regex> sanitizationRegexes = new List<Regex>
@@ -142,6 +131,7 @@ namespace Markov
         ConcurrentBag<string> recentProperNouns;
         public string GenerateSentence()
         {
+            recentProperNouns = fillProperNouns();
             var sb = new StringBuilder();
             var prevWord = _graph.Keys.ToList()[r.Next(_graph.Count)];
             int prevLength = 0;
@@ -157,21 +147,25 @@ namespace Markov
                 {
                     var word = pair.Key;
                     if (word == "i") word = "I";
-                    else if (word == "a") word = "A";
                     else if (word.Length < 2) continue;
                     var a = GetRandomDouble();
                     if (a <= pair.Value + total + MarkovConstants.ALPHA)
                     {
+                        if(word == prevWord)
+                        {
+                            prevWord = _graph.Keys.ToList()[GetRandomInt(_graph.Count)];
+                            continue;
+                        }
                         if (pair.Key == "flibbartygibbet")
                         {
                             word = recentProperNouns.Skip(GetRandomInt(recentProperNouns.Count)).Take(1).First();
                             var wordArr = word.ToCharArray();
                             wordArr[0] = char.ToUpper(wordArr[0]);
                             word = new string(wordArr);
-                            if(GetRandomDouble() < MarkovConstants.PROPERNOUN_OCCURANCE_MODIFIER)
+                            if(GetRandomDouble() > MarkovConstants.PROPERNOUN_OCCURANCE_MODIFIER)
                             {
                                 prevWord = word;
-                                break;
+                                continue; ;
                             }
                         }
                         if (first)
@@ -193,6 +187,8 @@ namespace Markov
                     sb.Replace('.', (char)7).Replace('?', (char)7).Replace('!', (char)7);
                 wordsInSentence++;
             } while (!sb.ToString().Contains('.') && !sb.ToString().Contains('?') && !sb.ToString().Contains('!') && wordsInSentence < MarkovConstants.MAXIMUM_SENTENCE_LENGTH);
+            sb.Remove(sb.Length - 1, 1);
+            sb.Append(". ");
             return sb.ToString().Replace(new string(new char[] { (char)7 }), "");
         }
         private static ConcurrentBag<string> fillProperNouns()
@@ -201,21 +197,6 @@ namespace Markov
             for(int i = 0; i < MarkovConstants.PROPER_NOUN_LIST_LENGTH; i++)
                 list.Add(properNouns[GetRandomInt(properNouns.Count)]);
             return list;
-        }
-        public string GenerateSentences(int length)
-        {
-            var bag = new ConcurrentBag<string>();
-            var sb = new StringBuilder();
-            Parallel.For(0, length, (i) =>
-            {
-                bag.Add(GenerateSentence());
-            });
-
-            foreach (var sentence in bag)
-            {
-                sb.Append(sentence);
-            }
-            return sb.ToString();
         }
         public void Dispose()
         {
