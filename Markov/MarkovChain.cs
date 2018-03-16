@@ -17,7 +17,7 @@ namespace Markov
         private Dictionary<string, Dictionary<string, int>> _occurences = new Dictionary<string, Dictionary<string, int>>();
         private Dictionary<string, Dictionary<string, double>> _graph;
         private static List<string> properNouns = new List<string>();
-        private static Random random = new Random();
+        private static RNGCryptoServiceProvider random = new RNGCryptoServiceProvider();
 
         public MarkovChain(string filename)
         {
@@ -37,7 +37,7 @@ namespace Markov
             var lines = File.ReadAllLines("dictionary.txt");
             var set = new HashSet<string>(lines);
             var prevWord = text.Substring(0, text.IndexOf(' '));
-            _occurences.Add("PROPER_NOUN", new Dictionary<string, int>());
+            _occurences.Add("flibbartygibbet", new Dictionary<string, int>());
             bool inProperNoun = false;
 
             foreach (var word in text.Split(' ').Skip(1))
@@ -59,8 +59,8 @@ namespace Markov
                             var sanitizedWord = prevWord.Replace(".", "").Replace(",", "").ToLower();
                             if (set.Contains(sanitizedWord))
                             {
-                                if (wordDict.ContainsKey("PROPER_NOUN")) wordDict["PROPER_NOUN"]++;
-                                else wordDict.Add("PROPER_NOUN", 1);
+                                if (wordDict.ContainsKey("flibbartygibbet")) wordDict["flibbartygibbet"]++;
+                                else wordDict.Add("flibbartygibbet", 1);
                             }
                         }
                     }
@@ -80,7 +80,7 @@ namespace Markov
                         {
                             inProperNoun = true;
                             properNouns.Add(prevWord);
-                            var wordDict = _occurences["PROPER_NOUN"];
+                            var wordDict = _occurences["flibbartygibbet"];
                             if (wordDict.ContainsKey(word))
                             {
                                 wordDict[word]++;
@@ -138,17 +138,15 @@ namespace Markov
         ConcurrentBag<string> recentProperNouns;
         public string GenerateSentence()
         {
-            string seedWord = _graph.Keys.ToList()[r.Next(_graph.Count)];
             var sb = new StringBuilder();
-            var prevWord = seedWord;
+            var prevWord = _graph.Keys.ToList()[r.Next(_graph.Count)];
             int prevLength = 0;
             int wordsInSentence = 0;
             bool first = true;
             do
             {
-                var r = random.NextDouble();
                 double total = 0;
-                while(!_graph.ContainsKey(prevWord)) prevWord = _graph.Keys.ToList()[random.Next(_graph.Count)];
+                while(!_graph.ContainsKey(prevWord)) prevWord = _graph.Keys.ToList()[GetRandomInt(_graph.Count)];
                 var dict = _graph[prevWord];
                
                 foreach (var pair in dict)
@@ -157,11 +155,12 @@ namespace Markov
                     if (word == "i") word = "I";
                     else if (word == "a") word = "A";
                     else if (word.Length < 2) continue;
-                    if (r < pair.Value + total)
+                    var a = GetRandomDouble();
+                    if (a <= pair.Value + total + MarkovConstants.ALPHA)
                     {
-                        if(pair.Key == "PROPER_NOUN")
+                        if(pair.Key == "flibbartygibbet")
                         {
-                            word = recentProperNouns.Skip(random.Next(recentProperNouns.Count)).Take(1).First();
+                            word = recentProperNouns.Skip(GetRandomInt(recentProperNouns.Count)).Take(1).First();
                         }
                         if (first)
                         {
@@ -170,38 +169,26 @@ namespace Markov
                             first = false;
                             sb.Append(new string(wordArr) + " ");
                         }
-                        else
-                        {
-                            sb.Append(word + " ");
-                        }
+                        else sb.Append(word + " ");
                         prevWord = word;
                         break;
                     }
-                    else
-                    {
-                        total += pair.Value;
-                    }
+                    else total += pair.Value;
                 }
-                if(prevLength == sb.Length)
-                {
-                    prevWord = _graph.Keys.ToList()[random.Next(_graph.Count)];
-                }
+                if(prevLength == sb.Length) prevWord = _graph.Keys.ToList()[GetRandomInt(_graph.Count)];
                 prevLength = sb.Length;
-                if(wordsInSentence < 8 && sb.ToString().Contains('.'))
-                {
-                    sb.Replace('.', ' ');
-                }
+                if(wordsInSentence < MarkovConstants.MINIMUM_SENTENCE_LENGTH && (sb.ToString().Contains('.') || sb.ToString().Contains('?') || sb.ToString().Contains('!')))
+                    sb.Replace('.', (char)7).Replace('?', (char)7).Replace('!', (char)7);
                 wordsInSentence++;
-            } while (!sb.ToString().Contains('.') && !sb.ToString().Contains('?') && !sb.ToString().Contains('!'));
-            var str = sb.ToString();
-            return str + " ";
+            } while (!sb.ToString().Contains('.') && !sb.ToString().Contains('?') && !sb.ToString().Contains('!') && wordsInSentence < MarkovConstants.MAXIMUM_SENTENCE_LENGTH);
+            return sb.ToString().Replace(new string(new char[] { (char)7 }), "");
         }
         private static ConcurrentBag<string> fillProperNouns()
         {
             var list = new ConcurrentBag<string>();
             do
             {
-                var name = properNouns[random.Next(properNouns.Count)];
+                var name = properNouns[GetRandomInt(properNouns.Count)];
                 if (name.Length >= 2 && ! name.Contains("."))
                 {
                     list.Add(name);
@@ -213,14 +200,16 @@ namespace Markov
         {
             var bag = new ConcurrentBag<string>();
             var sb = new StringBuilder();
-            Parallel.For(0, length, (i) =>
-            {
-                var sentence = "";
-                while(sentence.Length < 5) sentence = GenerateSentence();
-                bag.Add(sentence);
-            });
+            //Parallel.For(0, length, (i) =>
+            //{
+            //    bag.Add(GenerateSentence());
+            //});
 
-            foreach(var sentence in bag)
+            bag.Add(GenerateSentence());
+            bag.Add(GenerateSentence());
+            bag.Add(GenerateSentence());
+
+            foreach (var sentence in bag)
             {
                 sb.Append(sentence);
             }
@@ -231,6 +220,19 @@ namespace Markov
         public void Dispose()
         {
 
+        }
+
+        //using a CSPRNG just because native random doesn't seed well with multiple threads
+        private static int GetRandomInt(int range = Int32.MaxValue)
+        {
+            var bytes = new byte[4];
+            random.GetBytes(bytes);
+            bytes[3] &= 127; //absolute value
+            return BitConverter.ToInt32(bytes, 0) % range; //honestly this will bias the result slightly but idgaf
+        }
+        private static double GetRandomDouble() //this is super super poopy but you can't get uniformly distributed double values from bytes easily
+        {
+            return GetRandomInt() / (double)Int32.MaxValue;
         }
     }
 }
