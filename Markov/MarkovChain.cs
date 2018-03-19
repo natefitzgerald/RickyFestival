@@ -16,7 +16,7 @@ namespace Markov
     {
         private Dictionary<string, Dictionary<string, int>> _occurences = new Dictionary<string, Dictionary<string, int>>();
         private Dictionary<string, Dictionary<string, double>> _graph;
-        private static List<string> properNouns = new List<string>();
+        private static List<string> properNouns = new List<string> { "Ricky", "Festival", "Squatch Ness" };
         private static RNGCryptoServiceProvider random = new RNGCryptoServiceProvider();
         private static Regex punctuation = new Regex(@"\?|\!|\;|\:|\,|\.");
 
@@ -194,7 +194,8 @@ namespace Markov
         private static ConcurrentBag<string> fillProperNouns()
         {
             var list = new ConcurrentBag<string>();
-            for(int i = 0; i < MarkovConstants.PROPER_NOUN_LIST_LENGTH; i++)
+            if (properNouns.Count == 0) return list;
+            for (int i = 0; i < MarkovConstants.PROPER_NOUN_LIST_LENGTH; i++)
                 list.Add(properNouns[GetRandomInt(properNouns.Count)]);
             return list;
         }
@@ -206,6 +207,7 @@ namespace Markov
         //using a CSPRNG just because native random doesn't seed well with multiple threads
         private static int GetRandomInt(int range = Int32.MaxValue)
         {
+            if (range == 0) return 0;
             var bytes = new byte[4];
             random.GetBytes(bytes);
             bytes[3] &= 127; //absolute value
