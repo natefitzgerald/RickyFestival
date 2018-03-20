@@ -7,15 +7,10 @@ namespace Harness
     {
         static void Main(string[] args)
         {
-            using (var markov = new Markov.MarkovChain("text.txt"))
-            {
-                while (true)
-                {
-                    Console.Write(markov.GenerateSentences(2));
-                    Console.ReadKey(true);
-                    Console.Clear();
-                }
-            }
+            var text = File.ReadAllText("text.txt");
+            var markov = new Markov.Markov2(text);
+            Console.Write(markov.GenerateSentence() + Environment.NewLine);
+            Console.ReadKey();
         }
     }
 }
