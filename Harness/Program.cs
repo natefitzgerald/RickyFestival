@@ -9,8 +9,12 @@ namespace Harness
         {
             var text = File.ReadAllText("text.txt");
             var markov = new Markov.Markov2(text);
-            Console.Write(markov.GenerateSentence() + Environment.NewLine);
-            Console.ReadKey();
+            while (true)
+            {
+                Console.Clear();
+                Console.Write(markov.GenerateSentence() + Environment.NewLine);
+                Console.ReadKey();
+            }
         }
     }
 }

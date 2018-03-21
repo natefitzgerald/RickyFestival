@@ -169,7 +169,7 @@ namespace Markov
                             }
                         }
                         if (first)
-                        {
+                        {   
                             var wordArr = word.ToCharArray();
                             wordArr[0] = char.ToUpper(wordArr[0]);
                             first = false;

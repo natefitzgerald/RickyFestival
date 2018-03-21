@@ -9,6 +9,7 @@ namespace Markov
     public class Markov2
     {
         Dictionary<string, ChainWord> dict;
+        Dictionary<int, int> sentenceLength = new Dictionary<int, int>();
         public Markov2(string text)
         {
             text = Sanitize(text);
@@ -24,13 +25,14 @@ namespace Markov
                     if (i != 0 && char.IsUpper(word[0])) cap = true;
                     word = word.ToLower();
                     ChainWord chainWord;
-                    if(dict.ContainsKey(word))
+                    if (dict.ContainsKey(word))
                     {
                         chainWord = dict[word];
                     }
                     else
                     {
                         chainWord = new ChainWord(word);
+                    }
                         for(int j = 0; j < words.Length; j++)
                         {
                             if (i == j) continue;
@@ -44,8 +46,12 @@ namespace Markov
                             }
                         }
                         dict.Add(word, chainWord);
-                    }
+                    
+                    chainWord.endTotal++;
                 }
+
+                if (sentenceLength.ContainsKey(words.Length)) sentenceLength[words.Length]++;
+                else sentenceLength.Add(words.Length, 1);
             }
         }
         Random rand1 = new Random();
@@ -64,7 +70,7 @@ namespace Markov
                 
                 foreach(var key in word.near)
                 {
-                    r -= key.Value;
+                    r -= count < 8  && (double)dict[key.Key].end / dict[key.Key].endTotal > .85f ? key.Value - count * count : key.Value;
                     if(r <= 0)
                     {
                         sb.Append(dict[key.Key].capitalized ? Capitalize(key.Key) + " " : key.Key + " ");
@@ -86,6 +92,8 @@ namespace Markov
             public Dictionary<string, int> near = new Dictionary<string, int>();
             public bool capitalized = false;
             private int _sum = -1;
+            public int end = 0;
+            public int endTotal = 0;
             public ChainWord(string word)
             {
                 this.word = word;
