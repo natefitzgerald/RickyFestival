@@ -45,7 +45,8 @@ namespace Markov
                                 chainWord.near.Add(words[j].ToLower(), Dist(j, i));
                             }
                         }
-                        dict.Add(word, chainWord);
+                        if(!dict.ContainsKey(word))
+                            dict.Add(word, chainWord);
                     
                     chainWord.endTotal++;
                 }
